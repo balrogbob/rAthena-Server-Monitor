@@ -8,6 +8,11 @@ on:
     
 jobs:
   build:
+    runs-on: windows-latest
+    
+    permissions:
+      contents: read
+    
     strategy:
       matrix:
         platform: [Net9]
@@ -19,8 +24,6 @@ jobs:
             solution-name: rAthena-Server-Monitor.sln
             config: Release
             dotnet: 9.0.x
-
-    runs-on: windows-latest
 
     steps:
     - name: Checkout

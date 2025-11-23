@@ -1,17 +1,17 @@
-name: build
+name: release
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
     
 jobs:
-  build:
+  release:
     runs-on: windows-latest
     
     permissions:
-      contents: read
+      contents: write
     
     strategy:
       matrix:
@@ -55,8 +55,14 @@ jobs:
     - name:  Copy release files for upload
       run: Copy-Item -Path rAthena-Server-Monitor\bin\Release\${{matrix.build-dir}}\* -Destination C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}} -Recurse
 
-    - uses: actions/upload-artifact@v3.1.2        
+    - name: Create zip archive
+      run: Compress-Archive -Path C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}}\* -DestinationPath C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}}.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: ${{matrix.proj-name}} - ${{matrix.build-dir}}
-        path: C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}}
-        if-no-files-found: error
+        files: C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}}.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

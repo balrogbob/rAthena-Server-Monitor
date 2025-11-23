@@ -61,7 +61,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: C:\builtfiles\${{matrix.proj-name}}-${{matrix.package-name}}.zip
+        files: C:/builtfiles/${{matrix.proj-name}}-${{matrix.package-name}}.zip
         draft: false
         prerelease: false
       env:

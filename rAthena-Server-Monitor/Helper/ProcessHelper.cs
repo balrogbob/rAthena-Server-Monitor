@@ -6,26 +6,42 @@ public class ProcessHelper
     {
         var result = new ProcessResult();
 
-        using var process = new Process();
-        process.StartInfo.FileName = command;
+        // Do not dispose early; keep process alive for continuous monitoring
+        var process = new Process();
+
+        var normalizedCommand = command.Trim().Trim('"');
+        if (!Path.IsPathRooted(normalizedCommand))
+        {
+            normalizedCommand = Path.GetFullPath(normalizedCommand);
+        }
+        var workingDirectory = Path.GetDirectoryName(normalizedCommand) ?? Environment.CurrentDirectory;
+
+        process.StartInfo.FileName = normalizedCommand;
         process.StartInfo.UseShellExecute = false;
-        process.StartInfo.WorkingDirectory =
-            command.Substring(0,
-                command.Length - (command.Length - command.LastIndexOf('\\')));
+        process.StartInfo.WorkingDirectory = workingDirectory;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
-
         process.StartInfo.CreateNoWindow = true;
-
         process.EnableRaisingEvents = true;
+
         var outputBuilder = new StringBuilder();
-        var outputCloseEvent = new TaskCompletionSource<bool>();
+        var outputClosed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errorClosed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         process.OutputDataReceived += ProcDataReceived;
         process.ErrorDataReceived += ProcDataReceived;
         process.Exited += ProcHasExited;
 
         void ProcDataReceived(object sender, DataReceivedEventArgs e)
         {
+            if (e.Data == null)
+            {
+                // individual stream closes generate null; mark appropriately
+                // (both may get set multiple times, harmless)
+                outputClosed.TrySetResult(true);
+                errorClosed.TrySetResult(true);
+                return;
+            }
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
                 var proc = (Process)sender;
@@ -43,8 +59,6 @@ public class ProcessHelper
             var procLogin = ProcNameCfg(PublicClass.MySettings.LoginExePath);
             if (lower == procLogin.ToLower())
             {
-                #region information
-
                 if (e.Data.Contains("[Error]"))
                 {
                     UpCount(MyEnum.LogType.ErrorLogin);
@@ -57,48 +71,10 @@ public class ProcessHelper
                         var playerCount = e.Data.Split(':');
                         Program.FrmMain.Online = int.Parse(playerCount[2]);
                     }
-                    catch
-                    {
-                        Program.FrmMain.Online = 0;
-                    }
+                    catch { Program.FrmMain.Online = 0; }
                 }
-
                 OtherLog(sender, e);
-
-                #endregion information
-
-                if (e.Data.Contains("[Status]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Status, e.Data);
-                }
-                else if (e.Data.Contains("[Info]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Info, e.Data);
-                }
-                else if (e.Data.Contains("[Notice]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Notice, e.Data);
-                }
-                else if (e.Data.Contains("[Warning]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Warning, e.Data);
-                }
-                else if (e.Data.Contains("[Error]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Error, e.Data);
-                }
-                else if (e.Data.Contains("[SQL]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Sql, e.Data);
-                }
-                else if (e.Data.Contains("[Debug]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Debug, e.Data);
-                }
-                else
-                {
-                    WriteLogs(MyEnum.LogType.ErrorLogin, MyEnum.ConsoleType.Other, e.Data);
-                }
+                WriteCategorizedLogs(MyEnum.LogType.ErrorLogin, e.Data);
             }
         }
 
@@ -107,49 +83,13 @@ public class ProcessHelper
             var procChar = ProcNameCfg(PublicClass.MySettings.CharExePath);
             if (lower == procChar.ToLower())
             {
-                #region information
-
                 if (e.Data.Contains("[Error]"))
                 {
                     UpCount(MyEnum.LogType.ErrorChar);
                     UpLogs(MyEnum.LogType.ErrorChar, e.Data);
                 }
                 OtherLog(sender, e);
-
-                #endregion information
-
-                if (e.Data.Contains("[Status]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Status, e.Data);
-                }
-                else if (e.Data.Contains("[Info]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Info, e.Data);
-                }
-                else if (e.Data.Contains("[Notice]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Notice, e.Data);
-                }
-                else if (e.Data.Contains("[Warning]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Warning, e.Data);
-                }
-                else if (e.Data.Contains("[Error]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Error, e.Data);
-                }
-                else if (e.Data.Contains("[SQL]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Sql, e.Data);
-                }
-                else if (e.Data.Contains("[Debug]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Debug, e.Data);
-                }
-                else
-                {
-                    WriteLogs(MyEnum.LogType.ErrorChar, MyEnum.ConsoleType.Other, e.Data);
-                }
+                WriteCategorizedLogs(MyEnum.LogType.ErrorChar, e.Data);
             }
         }
 
@@ -158,68 +98,13 @@ public class ProcessHelper
             var procMap = ProcNameCfg(PublicClass.MySettings.MapExePath);
             if (lower == procMap.ToLower())
             {
-                #region information
-
                 if (e.Data.Contains("[Error]") || e.Data.Contains("script error"))
                 {
                     UpCount(MyEnum.LogType.ErrorMap);
                     UpLogs(MyEnum.LogType.ErrorMap, e.Data);
                 }
                 OtherLog(sender, e);
-
-                #endregion information
-
-                if (e.Data.Contains("[Status]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Status, e.Data);
-                }
-                else if (e.Data.Contains("[Info]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Info, e.Data);
-                }
-                else if (e.Data.Contains("[Notice]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Notice, e.Data);
-                }
-                else if (e.Data.Contains("[Warning]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Warning, e.Data);
-                }
-                else if (e.Data.Contains("[Error]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Error, e.Data);
-                }
-                else if (e.Data.Contains("[SQL]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Sql, e.Data);
-                }
-                else if (e.Data.Contains("[Debug]"))
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Debug, e.Data);
-                }
-                else
-                {
-                    WriteLogs(MyEnum.LogType.ErrorMap, MyEnum.ConsoleType.Other, e.Data);
-                }
-            }
-        }
-
-        void OtherLog(object sender, DataReceivedEventArgs e)
-        {
-            if (e.Data.Contains("[Debug]"))
-            {
-                UpCount(MyEnum.LogType.Debug);
-                UpLogs(MyEnum.LogType.Debug, e.Data);
-            }
-            else if (e.Data.Contains("[SQL]"))
-            {
-                UpCount(MyEnum.LogType.SQL);
-                UpLogs(MyEnum.LogType.SQL, e.Data);
-            }
-            else if (e.Data.Contains("[Warning]"))
-            {
-                UpCount(MyEnum.LogType.Warning);
-                UpLogs(MyEnum.LogType.Warning, e.Data);
+                WriteCategorizedLogs(MyEnum.LogType.ErrorMap, e.Data);
             }
         }
 
@@ -228,93 +113,53 @@ public class ProcessHelper
             var procMap = ProcNameCfg(PublicClass.MySettings.WebExePath);
             if (lower == procMap.ToLower())
             {
-                if (e.Data.Contains("[Status]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Status, e.Data);
-                }
-                else if (e.Data.Contains("[Info]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Info, e.Data);
-                }
-                else if (e.Data.Contains("[Notice]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Notice, e.Data);
-                }
-                else if (e.Data.Contains("[Warning]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Warning, e.Data);
-                }
-                else if (e.Data.Contains("[Error]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Error, e.Data);
-                }
-                else if (e.Data.Contains("[SQL]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Sql, e.Data);
-                }
-                else if (e.Data.Contains("[Debug]"))
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Debug, e.Data);
-                }
-                else
-                {
-                    WriteLogs(MyEnum.LogType.Web, MyEnum.ConsoleType.Other, e.Data);
-                }
+                WriteCategorizedLogs(MyEnum.LogType.Web, e.Data);
             }
         }
 
-        bool isStarted;
+        void OtherLog(object sender, DataReceivedEventArgs e)
+        {
+            if (e.Data.Contains("[Debug]")) { UpCount(MyEnum.LogType.Debug); UpLogs(MyEnum.LogType.Debug, e.Data); }
+            else if (e.Data.Contains("[SQL]")) { UpCount(MyEnum.LogType.SQL); UpLogs(MyEnum.LogType.SQL, e.Data); }
+            else if (e.Data.Contains("[Warning]")) { UpCount(MyEnum.LogType.Warning); UpLogs(MyEnum.LogType.Warning, e.Data); }
+        }
+
+        void WriteCategorizedLogs(MyEnum.LogType logType, string line)
+        {
+            if (line.Contains("[Status]")) WriteLogs(logType, MyEnum.ConsoleType.Status, line);
+            else if (line.Contains("[Info]")) WriteLogs(logType, MyEnum.ConsoleType.Info, line);
+            else if (line.Contains("[Notice]")) WriteLogs(logType, MyEnum.ConsoleType.Notice, line);
+            else if (line.Contains("[Warning]")) WriteLogs(logType, MyEnum.ConsoleType.Warning, line);
+            else if (line.Contains("[Error]")) WriteLogs(logType, MyEnum.ConsoleType.Error, line);
+            else if (line.Contains("[SQL]")) WriteLogs(logType, MyEnum.ConsoleType.Sql, line);
+            else if (line.Contains("[Debug]")) WriteLogs(logType, MyEnum.ConsoleType.Debug, line);
+            else WriteLogs(logType, MyEnum.ConsoleType.Other, line);
+        }
 
         try
         {
-            isStarted = process.Start();
+            process.Start();
         }
         catch (Exception error)
         {
-            // Usually it occurs when an executable file is not found or is not executable
-
             result.Completed = true;
             result.ExitCode = -1;
             result.Output = error.Message;
-
-            isStarted = false;
+            return result;
         }
 
-        if (isStarted)
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        // Await natural exit; no artificial timeout so output continues indefinitely
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        await Task.WhenAll(outputClosed.Task, errorClosed.Task).ConfigureAwait(false);
+
+        result.Completed = true;
+        result.ExitCode = process.ExitCode;
+        if (process.ExitCode != 0)
         {
-            // Reads the output stream first and then waits because deadlocks are possible
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            // Creates task to wait for process exit using timeout
-            var waitForExit = WaitForExitAsync(process, 50000);
-
-            // Create task to wait for process exit and closing all output streams
-            var processTask = Task.WhenAll(waitForExit, outputCloseEvent.Task);
-
-            // Waits process completion and then checks it was not completed by timeout
-            if (await Task.WhenAny(Task.Delay(50000), processTask).ConfigureAwait(false) == processTask && await waitForExit.ConfigureAwait(false))
-            {
-                result.Completed = true;
-                result.ExitCode = process.ExitCode;
-
-                // Adds process output if it was completed with error
-                if (process.ExitCode != 0)
-                {
-                    result.Output = $"{outputBuilder}";
-                }
-            }
-            else
-            {
-                try
-                {
-                    //process.Kill();
-                }
-                catch
-                {
-                    //
-                }
-            }
+            result.Output = outputBuilder.ToString();
         }
 
         return result;
@@ -332,40 +177,20 @@ public class ProcessHelper
 
         if (lower == proLogin.ToLower())
         {
-            Program.FrmMain.txtLogin.Invoke(delegate
-            {
-                Program.FrmMain.txtLogin.AppendText(">>Login Server - stopped<<" + Environment.NewLine);
-            });
+            Program.FrmMain.txtLogin.Invoke(delegate { Program.FrmMain.txtLogin.AppendText(">>Login Server - stopped<<" + Environment.NewLine); });
         }
-
         if (lower == proChar.ToLower())
         {
-            Program.FrmMain.txtChar.Invoke(delegate
-            {
-                Program.FrmMain.txtChar.AppendText(">>Char Server - stopped<<" + Environment.NewLine);
-            });
+            Program.FrmMain.txtChar.Invoke(delegate { Program.FrmMain.txtChar.AppendText(">>Char Server - stopped<<" + Environment.NewLine); });
         }
-
         if (lower == proMap.ToLower())
         {
-            Program.FrmMain.txtMap.Invoke(delegate
-            {
-                Program.FrmMain.txtMap.AppendText(">>Map Server - stopped<<" + Environment.NewLine);
-            });
+            Program.FrmMain.txtMap.Invoke(delegate { Program.FrmMain.txtMap.AppendText(">>Map Server - stopped<<" + Environment.NewLine); });
         }
-
         if (lower == proWeb.ToLower())
         {
-            Program.FrmMain.txtWeb.Invoke(delegate
-            {
-                Program.FrmMain.txtWeb.AppendText(">>Web Server - stopped<<" + Environment.NewLine);
-            });
+            Program.FrmMain.txtWeb.Invoke(delegate { Program.FrmMain.txtWeb.AppendText(">>Web Server - stopped<<" + Environment.NewLine); });
         }
-    }
-
-    private static Task<bool> WaitForExitAsync(Process process, int timeout)
-    {
-        return Task.Run(() => process.WaitForExit(timeout));
     }
 
     public struct ProcessResult
@@ -395,40 +220,21 @@ public class ProcessHelper
 
     public static string ProcNameCfg(string cfgName)
     {
-        return cfgName.Substring(cfgName.LastIndexOf("\\", StringComparison.Ordinal) + 1,
-            cfgName.LastIndexOf(".", StringComparison.Ordinal) - 1 - cfgName.LastIndexOf("\\", StringComparison.Ordinal));
+        var normalized = cfgName.Trim().Trim('"');
+        if (!Path.IsPathRooted(normalized)) { try { normalized = Path.GetFullPath(normalized); } catch { } }
+        return Path.GetFileNameWithoutExtension(normalized) ?? cfgName;
     }
 
     private void UpCount(MyEnum.LogType type)
     {
         switch (type)
         {
-            case MyEnum.LogType.ErrorChar:
-                Program.FrmMain.ErrorAll += 1;
-                Program.FrmMain.ErrorChar += 1;
-                break;
-
-            case MyEnum.LogType.ErrorMap:
-                Program.FrmMain.ErrorAll += 1;
-                Program.FrmMain.ErrorMap += 1;
-                break;
-
-            case MyEnum.LogType.ErrorLogin:
-                Program.FrmMain.ErrorAll += 1;
-                Program.FrmMain.ErrorLogin += 1;
-                break;
-
-            case MyEnum.LogType.Warning:
-                Program.FrmMain.Warning += 1;
-                break;
-
-            case MyEnum.LogType.SQL:
-                Program.FrmMain.Sql += 1;
-                break;
-
-            case MyEnum.LogType.Debug:
-                Program.FrmMain.IDebug += 1;
-                break;
+            case MyEnum.LogType.ErrorChar: Program.FrmMain.ErrorAll += 1; Program.FrmMain.ErrorChar += 1; break;
+            case MyEnum.LogType.ErrorMap: Program.FrmMain.ErrorAll += 1; Program.FrmMain.ErrorMap += 1; break;
+            case MyEnum.LogType.ErrorLogin: Program.FrmMain.ErrorAll += 1; Program.FrmMain.ErrorLogin += 1; break;
+            case MyEnum.LogType.Warning: Program.FrmMain.Warning += 1; break;
+            case MyEnum.LogType.SQL: Program.FrmMain.Sql += 1; break;
+            case MyEnum.LogType.Debug: Program.FrmMain.IDebug += 1; break;
         }
     }
 
@@ -437,32 +243,12 @@ public class ProcessHelper
         var result = value + Environment.NewLine;
         switch (type)
         {
-            case MyEnum.LogType.ErrorChar:
-                PublicClass.LogErrorAll += result;
-                PublicClass.LogErrorChar += result;
-                break;
-
-            case MyEnum.LogType.ErrorMap:
-                PublicClass.LogErrorAll += result;
-                PublicClass.LogErrorMap += result;
-                break;
-
-            case MyEnum.LogType.ErrorLogin:
-                PublicClass.LogErrorAll += result;
-                PublicClass.LogErrorLogin += result;
-                break;
-
-            case MyEnum.LogType.Warning:
-                PublicClass.LogWarning += result;
-                break;
-
-            case MyEnum.LogType.SQL:
-                PublicClass.LogSql += result;
-                break;
-
-            case MyEnum.LogType.Debug:
-                PublicClass.LogDebug += result;
-                break;
+            case MyEnum.LogType.ErrorChar: PublicClass.LogErrorAll += result; PublicClass.LogErrorChar += result; break;
+            case MyEnum.LogType.ErrorMap: PublicClass.LogErrorAll += result; PublicClass.LogErrorMap += result; break;
+            case MyEnum.LogType.ErrorLogin: PublicClass.LogErrorAll += result; PublicClass.LogErrorLogin += result; break;
+            case MyEnum.LogType.Warning: PublicClass.LogWarning += result; break;
+            case MyEnum.LogType.SQL: PublicClass.LogSql += result; break;
+            case MyEnum.LogType.Debug: PublicClass.LogDebug += result; break;
         }
     }
 
@@ -492,17 +278,9 @@ public class ProcessHelper
         {
             var header = $"[{consoleType}]";
             var newEData = value.Remove(0, header.Length);
-            txtLog.Invoke(delegate
-            {
-                txtLog.AppendText(header, color);
-                txtLog.AppendText(newEData + Environment.NewLine);
-            });
+            txtLog.Invoke(delegate { txtLog.AppendText(header, color); txtLog.AppendText(newEData + Environment.NewLine); });
             return;
         }
-
-        txtLog.Invoke(delegate
-        {
-            txtLog.AppendText(value + Environment.NewLine);
-        });
+        txtLog.Invoke(delegate { txtLog.AppendText(value + Environment.NewLine); });
     }
 }

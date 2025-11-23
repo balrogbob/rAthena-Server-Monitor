@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace rAthena_Server_Monitor;
 
 public partial class FrmMain : Form
@@ -9,6 +11,8 @@ public partial class FrmMain : Form
 
     private static int _errorAll, _errorChar, _errorLogin, _errorMap, _warning, _sql, _debug, _online;
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int ErrorAll
     {
         get => _errorAll;
@@ -25,6 +29,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int ErrorChar
     {
         get => _errorChar;
@@ -39,6 +45,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int ErrorLogin
     {
         get => _errorLogin;
@@ -53,6 +61,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int ErrorMap
     {
         get => _errorMap;
@@ -67,6 +77,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int Warning
     {
         get => _warning;
@@ -81,6 +93,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int Sql
     {
         get => _sql;
@@ -95,6 +109,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int IDebug
     {
         get => _debug;
@@ -109,6 +125,8 @@ public partial class FrmMain : Form
         }
     }
 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [Browsable(false)]
     public int Online
     {
         get => _online;
